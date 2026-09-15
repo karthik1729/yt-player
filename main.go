@@ -4,6 +4,7 @@
 //	yt-player          stdio MCP bridge (starts the daemon if needed)
 //	yt-player daemon   background service owning mpv and the queue
 //	yt-player call <tool> [json-args]   run one tool on the running daemon
+//	yt-player controls   one-line player with clickable ytp:// links, for a terminal pane
 package main
 
 import (
@@ -44,6 +45,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "controls" {
+		controls(sock)
 		return
 	}
 	if err := bridge(dir, sock); err != nil {
@@ -100,30 +105,40 @@ func callTool(sock string, args []string) error {
 			return fmt.Errorf("args: %w", err)
 		}
 	}
+	text, err := call(sock, args[0], in)
+	if text != "" {
+		fmt.Println(text)
+	}
+	return err
+}
+
+// call runs one tool on the running daemon and returns its text output.
+func call(sock, tool string, in map[string]any) (string, error) {
 	conn, err := net.Dial("unix", sock)
 	if err != nil {
-		return errors.New("yt-player daemon is not running")
+		return "", errors.New("yt-player daemon is not running")
 	}
 	ctx := context.Background()
 	client := mcp.NewClient(&mcp.Implementation{Name: "yt-player-cli", Version: "1.0.0"}, nil)
 	s, err := client.Connect(ctx, &mcp.IOTransport{Reader: conn, Writer: conn}, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer s.Close()
-	r, err := s.CallTool(ctx, &mcp.CallToolParams{Name: args[0], Arguments: in})
+	r, err := s.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: in})
 	if err != nil {
-		return err
+		return "", err
 	}
+	var text string
 	for _, c := range r.Content {
 		if t, ok := c.(*mcp.TextContent); ok {
-			fmt.Println(t.Text)
+			text += t.Text
 		}
 	}
 	if r.IsError {
-		return errors.New("tool failed")
+		return text, errors.New("tool failed")
 	}
-	return nil
+	return text, nil
 }
 
 func runDaemon(dir, sock string) {
