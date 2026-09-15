@@ -3,10 +3,13 @@
 //
 //	yt-player          stdio MCP bridge (starts the daemon if needed)
 //	yt-player daemon   background service owning mpv and the queue
+//	yt-player call <tool> [json-args]   run one tool on the running daemon
 package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -34,6 +37,13 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "daemon" {
 		runDaemon(dir, sock)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "call" {
+		if err := callTool(sock, os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if err := bridge(dir, sock); err != nil {
@@ -76,6 +86,44 @@ func bridge(dir, sock string) error {
 	}()
 	_, err = io.Copy(os.Stdout, conn)
 	return err
+}
+
+// callTool runs one tool on a running daemon without starting it,
+// for scripts and status bars: yt-player call <tool> [json-args]
+func callTool(sock string, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: yt-player call <tool> [json-args]")
+	}
+	var in map[string]any
+	if len(args) > 1 {
+		if err := json.Unmarshal([]byte(args[1]), &in); err != nil {
+			return fmt.Errorf("args: %w", err)
+		}
+	}
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return errors.New("yt-player daemon is not running")
+	}
+	ctx := context.Background()
+	client := mcp.NewClient(&mcp.Implementation{Name: "yt-player-cli", Version: "1.0.0"}, nil)
+	s, err := client.Connect(ctx, &mcp.IOTransport{Reader: conn, Writer: conn}, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	r, err := s.CallTool(ctx, &mcp.CallToolParams{Name: args[0], Arguments: in})
+	if err != nil {
+		return err
+	}
+	for _, c := range r.Content {
+		if t, ok := c.(*mcp.TextContent); ok {
+			fmt.Println(t.Text)
+		}
+	}
+	if r.IsError {
+		return errors.New("tool failed")
+	}
+	return nil
 }
 
 func runDaemon(dir, sock string) {
