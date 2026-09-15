@@ -164,6 +164,9 @@ type (
 	VolumeInput struct {
 		Level int `json:"level" jsonschema:"0-100"`
 	}
+	MuteInput struct {
+		On bool `json:"on" jsonschema:"true to mute, false to unmute"`
+	}
 	RepeatInput struct {
 		Mode string `json:"mode" jsonschema:"off, all or one"`
 	}
@@ -295,6 +298,13 @@ func (d *Daemon) server() *mcp.Server {
 		_, err := d.player.Command("set_property", "volume", min(max(in.Level, 0), 100))
 		return fmt.Sprintf("Volume %d.", in.Level), err
 	})
+	tool(s, "mute", "Mute or unmute", func(ctx context.Context, in MuteInput) (any, error) {
+		_, err := d.player.Command("set_property", "mute", in.On)
+		if in.On {
+			return "Muted.", err
+		}
+		return "Unmuted.", err
+	})
 	tool(s, "shuffle", "Shuffle the upcoming tracks in the queue", func(ctx context.Context, _ None) (any, error) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
@@ -317,7 +327,7 @@ func (d *Daemon) server() *mcp.Server {
 		st := map[string]any{"repeat": d.repeat, "queueLength": len(d.queue)}
 		if d.pos >= 0 && d.pos < len(d.queue) {
 			st["index"], st["current"] = d.pos, d.queue[d.pos]
-			for _, p := range []string{"time-pos", "duration", "pause", "volume"} {
+			for _, p := range []string{"time-pos", "duration", "pause", "volume", "mute"} {
 				if v, err := d.player.Command("get_property", p); err == nil {
 					st[p] = v
 				}
