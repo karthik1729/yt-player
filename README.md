@@ -10,6 +10,12 @@ YouTube Music player you control over MCP. Music plays in a background daemon, s
 ## Install
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/karthik1729/yt-player/main/install.sh | sh
+```
+
+This puts the latest macOS or Linux binary in `~/.local/bin` (override with `INSTALL_DIR=/usr/local/bin`). Binaries are also on [Releases](https://github.com/karthik1729/yt-player/releases), or build from source:
+
+```bash
 go install github.com/karthik1729/yt-player@latest
 ```
 
