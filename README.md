@@ -36,6 +36,7 @@ Or in any MCP client config:
 - `yt-player` is a stdio MCP bridge. It connects to the daemon's socket and starts the daemon if it isn't running.
 - `yt-player daemon` owns one mpv process and the queue. It listens on `~/Library/Caches/yt-player/daemon.sock` (`~/.cache/yt-player` on Linux), readable only by you.
 - Stop everything with the `stop` tool, or `pkill -f "yt-player daemon"`.
+- Scripts and status bars can call any tool on the running daemon: `yt-player call status`, `yt-player call volume '{"level":40}'`.
 
 ## Tools
 
