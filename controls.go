@@ -13,12 +13,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Colors match a tokyonight tab bar: background, bright text, dim text.
+// Colors match a tokyonight tab bar: background, bright text, dim text, separators, accent.
 const (
 	bg     = "\x1b[48;2;36;40;59m"
 	bright = "\x1b[38;2;192;202;245m"
 	dim    = "\x1b[38;2;115;122;162m"
 	faint  = "\x1b[38;2;86;95;137m"
+	accent = "\x1b[38;2;122;162;247m"
+	bold   = "\x1b[1m"
+	unbold = "\x1b[22m"
 )
 
 // link wraps label in an OSC 8 hyperlink; the terminal decides what a click on ytp:// does.
@@ -67,8 +70,10 @@ func truncate(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
-// controls redraws a one-line player every second until killed:
-// label, buttons and title on the left, cpu/ram meters and the clock on the right.
+const sep = faint + "  │  " // 5 cells
+
+// controls redraws a one-line bar every second until killed:
+// label on the left; song, buttons, cpu/ram meters and the clock on the right.
 func controls(sock, label string) {
 	fmt.Print("\x1b[?25l") // hide cursor
 	var stats string
@@ -80,18 +85,24 @@ func controls(sock, label string) {
 			cols = int(ws.Col)
 		}
 
+		left, leftWidth := "", 0
+		if label != "" {
+			left, leftWidth = " "+bold+accent+label+unbold, utf8.RuneCountInString(label)+1
+		}
+
+		// Right side, built from its end: clock, meters, buttons, then the song title in whatever room is left.
+		clock := time.Now().Format("15:04")
+		right, rightWidth := bold+bright+clock+unbold+"  ", len(clock)+2
+
 		if time.Since(statsAt) >= 3*time.Second {
 			stats, statsWidth = systemStats()
 			statsAt = time.Now()
 		}
-		clock := time.Now().Format("15:04")
-		right, rightWidth := dim+clock+"  ", len(clock)+2
 		if stats != "" {
-			right, rightWidth = stats+"   "+right, statsWidth+3+rightWidth
+			right, rightWidth = stats+sep+right, statsWidth+5+rightWidth
 		}
 
-		// Buttons are Nerd Font icons: one cell each, so widths stay exact.
-		left, leftWidth, title := "  "+dim+"player not running", 20, ""
+		title := ""
 		if out, err := call(sock, "status", nil); err == nil {
 			var st struct {
 				Pause   bool `json:"pause"`
@@ -108,24 +119,23 @@ func controls(sock, label string) {
 			if st.Mute {
 				mute = "󰖁"
 			}
-			left = " " + dim + link("previous", " 󰒮 ") + link("toggle", " "+play+" ") + link("next", " 󰒭 ") +
-				link("mute", " "+mute+" ") + link("stop", " 󰓛 ") + "  "
-			leftWidth = 1 + 5*3 + 2
+			// Nerd Font icons are one cell each, so the width is exact: 5 buttons of 3 cells.
+			buttons := dim + link("previous", " 󰒮 ") + link("toggle", " "+play+" ") + link("next", " 󰒭 ") +
+				link("mute", " "+mute+" ") + link("stop", " 󰓛 ")
+			right, rightWidth = buttons+sep+right, 15+5+rightWidth
 			if st.Current != nil {
 				title = st.Current.Title
 			} else {
-				left += dim + "nothing playing"
-				leftWidth += len("nothing playing")
+				title = "nothing playing"
 			}
 		}
-		if label != "" { // e.g. the terminal workspace name, bold blue like an active tab
-			left = " \x1b[1;38;2;122;162;247m" + label + "\x1b[22m " + faint + "│" + left
-			leftWidth += utf8.RuneCountInString(label) + 3
+		title = truncate(title, min(40, cols-leftWidth-rightWidth-4))
+		if title != "" {
+			right, rightWidth = bright+title+" "+right, utf8.RuneCountInString(title)+1+rightWidth
 		}
-		title = truncate(title, cols-leftWidth-rightWidth-2)
-		gap := max(cols-leftWidth-utf8.RuneCountInString(title)-rightWidth, 0)
 
-		fmt.Print("\x1b[H", bg, "\x1b[2K", left, bright, title, strings.Repeat(" ", gap), right)
+		gap := max(cols-leftWidth-rightWidth, 0)
+		fmt.Print("\x1b[H", bg, "\x1b[2K", left, strings.Repeat(" ", gap), right)
 		time.Sleep(time.Second)
 	}
 }
