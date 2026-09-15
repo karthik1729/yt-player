@@ -138,6 +138,9 @@ func runDaemon(dir, sock string) {
 	}
 	os.Chmod(sock, 0o600)
 
+	// Clients like GUI apps start us with a minimal PATH; mpv and the yt-dlp it runs usually live here.
+	os.Setenv("PATH", os.Getenv("PATH")+":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
+
 	d := newDaemon(filepath.Join(dir, "mpv.sock"))
 	server := d.server()
 
