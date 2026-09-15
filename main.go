@@ -4,7 +4,7 @@
 //	yt-player          stdio MCP bridge (starts the daemon if needed)
 //	yt-player daemon   background service owning mpv and the queue
 //	yt-player call <tool> [json-args]   run one tool on the running daemon
-//	yt-player controls   one-line player with clickable ytp:// links, for a terminal pane
+//	yt-player controls [label]   one-line player with clickable ytp:// links, for a terminal pane
 package main
 
 import (
@@ -48,7 +48,11 @@ func main() {
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "controls" {
-		controls(sock)
+		label := ""
+		if len(os.Args) > 2 {
+			label = os.Args[2]
+		}
+		controls(sock, label)
 		return
 	}
 	if err := bridge(dir, sock); err != nil {
