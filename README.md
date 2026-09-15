@@ -47,6 +47,7 @@ Or in any MCP client config:
 | `open` | Album, artist, playlist or category page |
 | `play` | Replace the queue with a song, radio, playlist, album or artist |
 | `queue_add` | Append to the queue |
+| `watch` | Open a video in its own mpv window (pauses the music) |
 | `queue` | List the queue |
 | `jump` | Play queue index |
 | `next` / `previous` | Skip tracks |

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
@@ -164,6 +165,10 @@ type (
 	VolumeInput struct {
 		Level int `json:"level" jsonschema:"0-100"`
 	}
+	WatchInput struct {
+		Query   string `json:"query,omitempty" jsonschema:"search text; opens the top video"`
+		VideoID string `json:"videoId,omitempty" jsonschema:"YouTube video id"`
+	}
 	MuteInput struct {
 		On bool `json:"on" jsonschema:"true to mute, false to unmute"`
 	}
@@ -297,6 +302,32 @@ func (d *Daemon) server() *mcp.Server {
 	tool(s, "volume", "Set volume 0-100", func(ctx context.Context, in VolumeInput) (any, error) {
 		_, err := d.player.Command("set_property", "volume", min(max(in.Level, 0), 100))
 		return fmt.Sprintf("Volume %d.", in.Level), err
+	})
+	tool(s, "watch", "Open a YouTube video in its own mpv window (pauses the music)", func(ctx context.Context, in WatchInput) (any, error) {
+		id, title := in.VideoID, in.VideoID
+		if in.Query != "" {
+			secs, err := search(ctx, in.Query, "videos")
+			if err != nil {
+				return nil, err
+			}
+			t := tracks(secs)
+			if len(t) == 0 {
+				return nil, errors.New("no videos found")
+			}
+			id, title = t[0].VideoID, t[0].Title
+		}
+		if !videoRe.MatchString(id) {
+			return nil, errors.New("provide query or a valid videoId")
+		}
+		cmd := exec.Command("mpv", "--force-window=immediate", "https://www.youtube.com/watch?v="+id)
+		if err := cmd.Start(); err != nil {
+			return nil, fmt.Errorf("start mpv: %w", err)
+		}
+		go cmd.Wait()
+		if d.player.Running() {
+			d.player.Command("set_property", "pause", true)
+		}
+		return "Opened video: " + title, nil
 	})
 	tool(s, "mute", "Mute or unmute", func(ctx context.Context, in MuteInput) (any, error) {
 		_, err := d.player.Command("set_property", "mute", in.On)
